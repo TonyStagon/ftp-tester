@@ -1,0 +1,44 @@
+name: Deploy site to FTP (cPanel)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install lftp
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Deploy site via FTP/FTPS
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}    # optional; leave unset for 21
+          FTP_TARGET_DIR: ${{ secrets.FTP_TARGET_DIR }} # optional; e.g., /public_html
+        run: |
+          # Configuration
+          HOST="${FTP_HOST:?need FTP_HOST secret}"
+          USER="${FTP_USER:?need FTP_USER secret}"
+          PASS="${FTP_PASSWORD:?need FTP_PASSWORD secret}"
+          PORT="${FTP_PORT:-21}"
+          TARGET_DIR="${FTP_TARGET_DIR:-/public_html}"
+          echo "Deploying to $HOST:$PORT -> $TARGET_DIR (files in repo root)"
+
+          # Use lftp to mirror the repository root to the target directory.
+          # For FTPS (explicit TLS) we set ftp:ssl-allow and ftp:ssl-force; remove these for plain FTP.
+          lftp -u "$USER","$PASS" -e "\
+            set ftp:ssl-allow true; \
+            set ftp:ssl-force true; \
+            set ssl:verify-certificate no; \
+            set net:max-retries 2; \
+            set net:timeout 20; \
+            mirror -R --delete --verbose ./ \"$TARGET_DIR\"; \
+            bye" "ftp://$HOST:$PORT"
