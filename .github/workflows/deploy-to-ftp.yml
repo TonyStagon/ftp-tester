@@ -1,4 +1,4 @@
-name: Deploy site to FTP (cPanel) with diagnostics (defaults to FTP home)
+name: Deploy site to FTP (cPanel) with mkdir + dry-run
 
 on:
   workflow_dispatch:
@@ -19,7 +19,7 @@ jobs:
       - name: Show remote pwd and listing (diagnostic)
         env:
           FTP_HOST: ${{ secrets.FTP_HOST }}
-          FTP_USER: ${{ secrets.FTP_USER }}   # Username
+          FTP_USER: ${{ secrets.FTP_USER }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
           FTP_PORT: ${{ secrets.FTP_PORT }}
         run: |
@@ -34,18 +34,44 @@ jobs:
             set ftp:passive-mode true; \
             pwd; ls -la; bye" "ftp://$HOST:$PORT"
 
-      - name: Deploy (dry-run mirror to FTP home)
+      - name: Ensure remote path exists
         env:
           FTP_HOST: ${{ secrets.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USER }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
           FTP_PORT: ${{ secrets.FTP_PORT }}
+          FTP_TARGET_DIR: ${{ secrets.FTP_TARGET_DIR }}
         run: |
           HOST="${FTP_HOST:?need FTP_HOST secret}"
           USER="${FTP_USER:?need FTP_USER secret}"
           PASS="${FTP_PASSWORD:?need FTP_PASSWORD secret}"
           PORT="${FTP_PORT:-21}"
-          TARGET_DIR="/"
+          TARGET_DIR="${FTP_TARGET_DIR:-/}"
+          echo "Ensuring remote path exists: $TARGET_DIR"
+          # create the full path (mkdir -p equivalent using lftp)
+          lftp -u "$USER","$PASS" -e "\
+            set ftp:ssl-allow true; \
+            set ssl:verify-certificate no; \
+            set ftp:passive-mode true; \
+            # create each path component if necessary \
+            cd /; \
+            mkdir -p \"$TARGET_DIR\" || true; \
+            pwd; ls -la \"$TARGET_DIR\" || true; \
+            bye" "ftp://$HOST:$PORT"
+
+      - name: Deploy (dry-run mirror) to FTP_TARGET_DIR
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          FTP_TARGET_DIR: ${{ secrets.FTP_TARGET_DIR }}
+        run: |
+          HOST="${FTP_HOST:?need FTP_HOST secret}"
+          USER="${FTP_USER:?need FTP_USER secret}"
+          PASS="${FTP_PASSWORD:?need FTP_PASSWORD secret}"
+          PORT="${FTP_PORT:-21}"
+          TARGET_DIR="${FTP_TARGET_DIR:-/}"
           echo "Dry-run deploy to $HOST:$PORT -> $TARGET_DIR (mirror --dry-run)"
           lftp -u "$USER","$PASS" -e "\
             set ftp:ssl-allow true; \
@@ -55,3 +81,27 @@ jobs:
             set net:timeout 20; \
             mirror -R --delete --verbose --dry-run ./ \"$TARGET_DIR\"; \
             bye" "ftp://$HOST:$PORT"
+
+      # To run a real deploy, remove --dry-run in the mirror command above OR
+      # uncomment the step below (only do this after you confirm dry-run results).
+      # - name: Deploy (real mirror)
+      #   env:
+      #     FTP_HOST: ${{ secrets.FTP_HOST }}
+      #     FTP_USER: ${{ secrets.FTP_USER }}
+      #     FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      #     FTP_PORT: ${{ secrets.FTP_PORT }}
+      #     FTP_TARGET_DIR: ${{ secrets.FTP_TARGET_DIR }}
+      #   run: |
+      #     HOST="${FTP_HOST:?need FTP_HOST secret}"
+      #     USER="${FTP_USER:?need FTP_USER secret}"
+      #     PASS="${FTP_PASSWORD:?need FTP_PASSWORD secret}"
+      #     PORT="${FTP_PORT:-21}"
+      #     TARGET_DIR="${FTP_TARGET_DIR:-/}"
+      #     lftp -u "$USER","$PASS" -e "\
+      #       set ftp:ssl-allow true; \
+      #       set ssl:verify-certificate no; \
+      #       set ftp:passive-mode true; \
+      #       set net:max-retries 2; \
+      #       set net:timeout 20; \
+      #       mirror -R --delete --verbose ./ \"$TARGET_DIR\"; \
+      #       bye" "ftp://$HOST:$PORT"
