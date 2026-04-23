@@ -1,0 +1,49 @@
+name: FTP integration test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ftp-integration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install lftp and Python deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lftp
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: Test FTP: list root
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          echo "Testing FTP LIST against $FTP_SERVER (user masked)"
+          # Use lftp to attempt a secure short listing; adapt protocol if needed (ftp:// or ftps://)
+          lftp -u "$FTP_USER","$FTP_PASSWORD" -e "set net:max-retries 1; set net:timeout 10; ls -la; bye" "ftp://$FTP_SERVER"
+
+      - name: Upload + download roundtrip (verify)
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          echo "Performing upload/download verification"
+          TMPFILE="ci-ftp-test-$$.txt"
+          echo "ci ftp test $(date -u)" > "$TMPFILE"
+          # upload
+          lftp -u "$FTP_USER","$FTP_PASSWORD" -e "put $TMPFILE -o $TMPFILE; bye" "ftp://$FTP_SERVER"
+          # download back to a different filename and verify contents
+          lftp -u "$FTP_USER","$FTP_PASSWORD" -e "get $TMPFILE -o ${TMPFILE}.down; bye" "ftp://$FTP_SERVER"
+          if ! cmp -s "$TMPFILE" "${TMPFILE}.down"; then
+            echo "Uploaded and downloaded files differ" >&2
+            echo "Local:" && cat "$TMPFILE"
+            echo "Downloaded:" && cat "${TMPFILE}.down"
+            exit 2
+          fi
+          echo "Upload/download roundtrip OK"
