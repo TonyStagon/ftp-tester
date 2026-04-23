@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FTP Connection Tester</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a0c10;
+      --surface: #111318;
+      --border: #1e2230;
+      --accent: #00e5ff;
+      --accent2: #ff4081;
+      --green: #00e676;
+      --yellow: #ffea00;
+      --red: #ff1744;
+      --text: #c8d0e0;
+      --muted: #4a5568;
+      --mono: 'Share Tech Mono', monospace;
+      --sans: 'Syne', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+      position: relative;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 20% 10%, rgba(0,229,255,0.05) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 30% at 80% 90%, rgba(255,64,129,0.04) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .container { width: 100%; max-width: 720px; position: relative; z-index: 2; }
+    header { margin-bottom: 40px; text-align: left; }
+    .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.25em; color: var(--accent); text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+    .eyebrow::before { content: '//'; color: var(--muted); }
+    h1 { font-family: var(--sans); font-size: clamp(28px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; color: #fff; line-height: 1.1; }
+    h1 span { color: var(--accent); }
+    .subtitle { margin-top: 10px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 28px; margin-bottom: 20px; position: relative; }
+    .panel-label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+    .panel-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-grid .full { grid-column: 1 / -1; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+    input, select { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 10px 14px; color: var(--text); font-family: var(--mono); font-size: 13px; width: 100%; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+    input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,229,255,0.08); }
+    input::placeholder { color: var(--muted); }
+    select option { background: #111; }
+    .btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px 24px; background: transparent; border: 1px solid var(--accent); color: var(--accent); font-family: var(--mono); font-size: 13px; letter-spacing: 0.15em; text-transform: uppercase; border-radius: 3px; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; }
+    .btn::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: translateX(-100%); transition: transform 0.25s ease; z-index: 0; }
+    .btn:hover::before { transform: translateX(0); }
+    .btn:hover { color: var(--bg); }
+    .btn span { position: relative; z-index: 1; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+    .terminal { background: #06080c; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+    .terminal-bar { background: #0f1117; padding: 10px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot.r { background: #ff5f57; }
+    .dot.y { background: #febc2e; }
+    .dot.g { background: #28c840; }
+    .terminal-title { font-size: 11px; color: var(--muted); margin-left: 8px; }
+    .log-body { padding: 20px; min-height: 180px; max-height: 320px; overflow-y: auto; font-size: 12.5px; line-height: 1.8; }
+    .log-body::-webkit-scrollbar { width: 4px; }
+    .log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .log-line { display: flex; gap: 12px; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .log-ts { color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+    .log-msg { word-break: break-all; }
+    .log-line.info .log-msg { color: var(--text); }
+    .log-line.ok .log-msg { color: var(--green); }
+    .log-line.warn .log-msg { color: var(--yellow); }
+    .log-line.error .log-msg { color: var(--red); }
+    .log-line.accent .log-msg { color: var(--accent); }
+    .log-empty { color: var(--muted); font-size: 12px; padding: 40px 0; text-align: center; }
+    .status-bar { display: flex; align-items: center; gap: 10px; margin-top: 16px; font-size: 12px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 2px; font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; font-family: var(--mono); }
+    .badge.idle { background: rgba(74,85,104,0.2); color: var(--muted); border: 1px solid var(--border); }
+    .badge.testing { background: rgba(255,234,0,0.08); color: var(--yellow); border: 1px solid rgba(255,234,0,0.3); }
+    .badge.success { background: rgba(0,230,118,0.08); color: var(--green); border: 1px solid rgba(0,230,118,0.3); }
+    .badge.failure { background: rgba(255,23,68,0.08); color: var(--red); border: 1px solid rgba(255,23,68,0.3); }
+    .pulse { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+    .note { margin-top: 16px; padding: 12px 16px; background: rgba(0,229,255,0.04); border-left: 2px solid rgba(0,229,255,0.3); font-size: 11.5px; color: var(--muted); line-height: 1.7; }
+    .note strong { color: var(--accent); }
+    .clear-btn { background: transparent; border: none; color: var(--muted); font-family: var(--mono); font-size: 11px; cursor: pointer; letter-spacing: 0.1em; margin-left: auto; transition: color 0.2s; text-transform: uppercase; }
+    .clear-btn:hover { color: var(--text); }
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="eyebrow">FTP Utility</div>
+      <h1>Connection <span>Tester</span></h1>
+      <p class="subtitle">Validate FTP/FTPS server reachability from your browser. Configure below and hit Test.</p>
+    </header>
+
+    <div class="panel">
+      <div class="panel-label">Server Configuration</div>
+      <div class="form-grid">
+        <div class="field full">
+          <label>Hostname / IP</label>
+          <input id="host" type="text" placeholder="ftp.example.com or 192.168.1.100" />
+        </div>
+        <div class="field">
+          <label>Port</label>
+          <input id="port" type="number" placeholder="21" value="21" min="1" max="65535" />
+        </div>
+        <div class="field">
+          <label>Protocol</label>
+          <select id="protocol">
+            <option value="ftp">FTP (Plain)</option>
+            <option value="ftps">FTPS (Explicit TLS)</option>
+            <option value="sftp">SFTP (SSH)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Username</label>
+          <input id="user" type="text" placeholder="anonymous" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input id="pass" type="password" placeholder="••••••••" />
+        </div>
+        <div class="field">
+          <label>Timeout (ms)</label>
+          <input id="timeout" type="number" value="5000" min="1000" max="30000" />
+        </div>
+      </div>
+      <div style="margin-top:20px;">
+        <button class="btn" id="testBtn" onclick="runTest()">
+          <span id="btnContent">&#9654;&nbsp; Test Connection</span>
+        </button>
+      </div>
+      <div class="note">
+        <strong>Note:</strong> Browsers cannot open raw TCP sockets. This tool simulates a detailed FTP handshake walkthrough in the log. To enable <strong>real</strong> TCP probing, deploy the Node.js proxy included in the HTML source comments and set <code>PROXY_URL</code> at the top of the script.
+      </div>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="dot r"></div>
+        <div class="dot y"></div>
+        <div class="dot g"></div>
+        <span class="terminal-title">ftp-tester — connection log</span>
+        <button class="clear-btn" onclick="clearLog()">clear</button>
+      </div>
+      <div class="log-body" id="log">
+        <div class="log-empty">Run a test to see connection output here…</div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <div class="badge idle" id="badge">
+        <span class="pulse"></span> IDLE
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Set this to your proxy URL to enable real FTP testing.
+    // Leave empty for simulation/demo mode.
+    const PROXY_URL = '';
+
+    let running = false;
+
+    function ts() {
+      return new Date().toISOString().replace('T','  ').slice(0, 22);
+    }
+
+    function log(msg, type = 'info') {
+      const body = document.getElementById('log');
+      const empty = body.querySelector('.log-empty');
+      if (empty) empty.remove();
+      const el = document.createElement('div');
+      el.className = 'log-line ' + type;
+      el.innerHTML = '<span class="log-ts">[' + ts() + ']</span><span class="log-msg">' + msg + '</span>';
+      body.appendChild(el);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById('log').innerHTML = '<div class="log-empty">Run a test to see connection output here…</div>';
+      setBadge('idle');
+    }
+
+    function setBadge(state) {
+      const b = document.getElementById('badge');
+      b.className = 'badge ' + state;
+      const labels = { idle: 'IDLE', testing: 'TESTING…', success: 'SUCCESS', failure: 'FAILURE' };
+      b.innerHTML = '<span class="pulse"></span> ' + (labels[state] || state);
+    }
+
+    function setBtn(busy) {
+      const btn = document.getElementById('testBtn');
+      const content = document.getElementById('btnContent');
+      btn.disabled = busy;
+      content.innerHTML = busy
+        ? '<span class="spinner"></span>&nbsp; Running…'
+        : '&#9654;&nbsp; Test Connection';
+    }
+
+    function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    async function simulateTest(cfg) {
+      const steps = [
+        { msg: 'Resolving hostname: <b>' + cfg.host + '</b>', type: 'accent', ms: 320 },
+        { msg: 'DNS lookup complete (simulated — browser sandbox)', type: 'info', ms: 380 },
+        { msg: 'Opening TCP socket to <b>' + cfg.host + ':' + cfg.port + '</b>…', type: 'accent', ms: 480 },
+        { msg: 'TCP SYN sent', type: 'info', ms: 180 },
+        { msg: 'TCP SYN-ACK received — connection established', type: 'ok', ms: 380 },
+        { msg: '&larr; 220 ' + cfg.host + ' FTP server ready (' + cfg.protocol.toUpperCase() + ')', type: 'ok', ms: 280 },
+        { msg: '&rarr; AUTH TLS' + (cfg.protocol === 'ftps' ? ' (FTPS mode)' : ''), type: 'info', ms: 280 },
+        { msg: '&larr; 234 AUTH TLS OK', type: 'ok', ms: 240 },
+        { msg: '&rarr; USER ' + (cfg.user || 'anonymous'), type: 'info', ms: 280 },
+        { msg: '&larr; 331 Password required for ' + (cfg.user || 'anonymous'), type: 'ok', ms: 240 },
+        { msg: '&rarr; PASS ********', type: 'info', ms: 280 },
+        { msg: '&larr; 230 Login successful', type: 'ok', ms: 240 },
+        { msg: '&rarr; SYST', type: 'info', ms: 180 },
+        { msg: '&larr; 215 UNIX Type: L8', type: 'ok', ms: 180 },
+        { msg: '&rarr; FEAT', type: 'info', ms: 180 },
+        { msg: '&larr; 211-Extensions: SIZE MDTM REST STREAM MLST MLSD UTF8', type: 'ok', ms: 280 },
+        { msg: '&rarr; PWD', type: 'info', ms: 180 },
+        { msg: '&larr; 257 "/" is current directory', type: 'ok', ms: 180 },
+        { msg: 'Handshake complete &#10003;', type: 'ok', ms: 100 },
+      ];
+
+      const fail = Math.random() < 0.15;
+      const failAt = fail ? Math.floor(Math.random() * (steps.length - 5)) + 3 : -1;
+
+      for (let i = 0; i < steps.length; i++) {
+        await delay(steps[i].ms);
+        if (i === failAt) {
+          await delay(cfg.timeout * 0.3);
+          log('&larr; Connection refused / timeout after ' + cfg.timeout + 'ms', 'error');
+          log('TCP RST received — server rejected connection', 'error');
+          return false;
+        }
+        log(steps[i].msg, steps[i].type);
+      }
+      return true;
+    }
+
+    async function proxyTest(cfg) {
+      log('Sending probe to proxy: ' + PROXY_URL, 'accent');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), cfg.timeout);
+      try {
+        const res = await fetch(PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cfg),
+          signal: controller.signal
+        });
+        clearTimeout(timer);
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' from proxy');
+        const data = await res.json();
+        for (const line of (data.log || [])) {
+          log(line.msg, line.type || 'info');
+          await delay(80);
+        }
+        return data.success;
+      } catch (err) {
+        clearTimeout(timer);
+        log(err.name === 'AbortError'
+          ? 'Proxy request timed out after ' + cfg.timeout + 'ms'
+          : 'Proxy error: ' + err.message, 'error');
+        return false;
+      }
+    }
+
+    async function runTest() {
+      if (running) return;
+      const host = document.getElementById('host').value.trim();
+      if (!host) { log('Please enter a hostname or IP address.', 'warn'); return; }
+
+      running = true;
+      setBtn(true);
+      setBadge('testing');
+
+      const cfg = {
+        host,
+        port: parseInt(document.getElementById('port').value) || 21,
+        protocol: document.getElementById('protocol').value,
+        user: document.getElementById('user').value.trim() || 'anonymous',
+        pass: document.getElementById('pass').value,
+        timeout: parseInt(document.getElementById('timeout').value) || 5000
+      };
+
+      log('──────────────────────────────────────────', 'info');
+      log('Starting ' + cfg.protocol.toUpperCase() + ' connection test', 'accent');
+      log('Target: ' + cfg.host + ':' + cfg.port + '  |  User: ' + cfg.user + '  |  Timeout: ' + cfg.timeout + 'ms', 'info');
+      log('──────────────────────────────────────────', 'info');
+
+      let success = false;
+      try {
+        if (PROXY_URL) {
+          success = await proxyTest(cfg);
+        } else {
+          log('[DEMO MODE] No proxy configured — running simulated FTP handshake', 'warn');
+          success = await simulateTest(cfg);
+        }
+      } catch (e) {
+        log('Unexpected error: ' + e.message, 'error');
+      }
+
+      await delay(200);
+      log('──────────────────────────────────────────', 'info');
+      if (success) {
+        log('&#10003; RESULT: Connection SUCCESSFUL', 'ok');
+        setBadge('success');
+      } else {
+        log('&#10007; RESULT: Connection FAILED', 'error');
+        setBadge('failure');
+      }
+
+      running = false;
+      setBtn(false);
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !running) runTest();
+    });
+  </script>
+</body>
+</html>
+
+<!--
+=======================================================
+  OPTIONAL: Node.js FTP Proxy (for real TCP testing)
+  1. npm install (no deps needed — uses built-in net/http)
+  2. node server.js
+  3. Set PROXY_URL = 'http://localhost:3001' in the script
+
+// server.js
+const http = require('http');
+const net  = require('net');
+
+http.createServer((req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') { res.end(); return; }
+
+  let body = '';
+  req.on('data', d => body += d);
+  req.on('end', () => {
+    const { host, port, timeout } = JSON.parse(body);
+    const log = [];
+    const socket = new net.Socket();
+    let done = false;
+
+    const finish = (success) => {
+      if (done) return; done = true;
+      socket.destroy();
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success, log }));
+    };
+
+    socket.setTimeout(timeout || 5000);
+    socket.on('timeout', () => { log.push({ msg: 'Connection timed out', type: 'error' }); finish(false); });
+    socket.on('error', err => { log.push({ msg: 'Socket error: ' + err.message, type: 'error' }); finish(false); });
+    socket.on('data', data => {
+      const msg = data.toString().trim();
+      log.push({ msg: '<- ' + msg, type: msg.startsWith('2') ? 'ok' : 'warn' });
+      if (msg.startsWith('220')) {
+        log.push({ msg: '-> QUIT', type: 'info' });
+        socket.write('QUIT\r\n');
+        setTimeout(() => finish(true), 300);
+      }
+    });
+
+    log.push({ msg: 'Connecting to ' + host + ':' + port + '...', type: 'accent' });
+    socket.connect(parseInt(port), host, () => {
+      log.push({ msg: 'TCP connection established', type: 'ok' });
+    });
+  });
+}).listen(3001, () => console.log('FTP proxy on :3001'));
+=======================================================
+-->
