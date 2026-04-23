@@ -21,7 +21,7 @@ jobs:
           FTP_HOST: ${{ secrets.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USER }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-          FTP_PORT: ${{ secrets.FTP_PORT }}    # optional; leave unset for 21
+          FTP_PORT: ${{ secrets.FTP_PORT }}    # optionall; leave unset for 21
           FTP_TARGET_DIR: ${{ secrets.FTP_TARGET_DIR }} # optional; e.g., /public_html
         run: |
           # Configuration
